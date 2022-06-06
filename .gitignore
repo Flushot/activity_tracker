@@ -1,0 +1,14 @@
+# Python
+*.log
+*.pyc
+*.pyo
+__pycache__/
+*.egg-info/
+*.eggs/
+/pip-wheel-metadata/
+.pytest-cache/
+.mypy-cache/
+
+# IDE
+*.iml
+.idea/

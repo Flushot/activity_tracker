@@ -1,0 +1,18 @@
+[project]
+name = "activity_tracker"
+description = "Garmin watch activity tracker"
+version = "0.1.0"
+authors = [
+    { name = "Chris Lyon", email = "chris@lyon.la" }
+]
+dependencies = [
+    "pytz",
+    "fitparse",
+    "geojson"
+]
+
+[project.optional-dependencies]
+dev = [
+    "tox",
+    "bump2version"
+]
