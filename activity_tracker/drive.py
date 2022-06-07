@@ -6,6 +6,8 @@ import win32api
 import win32con
 import win32gui
 import ctypes
+from ctypes import wintypes
+import string
 
 
 @dataclass
@@ -21,6 +23,7 @@ class Drive:
     }
 
     letter: str
+    label: str
     drive_type: int
 
     @property
@@ -124,10 +127,17 @@ class DeviceListener:
 
         :return: list of drives
         """
-        drives = []
+        drive_bits = ctypes.windll.kernel32.GetLogicalDrives()
+        drive_letters = [letter for i, letter in enumerate(string.ascii_uppercase) if drive_bits >> i & 1 == 1]
 
-        for drive_root in win32api.GetLogicalDriveStrings().strip('\x00').split('\x00'):
-            drives.append(Drive(letter=drive_root[0:2],
-                                drive_type=ctypes.windll.kernel32.GetDriveTypeW(drive_root)))
+        drives = []
+        for drive_letter in drive_letters:
+            volume_name = ctypes.create_unicode_buffer(wintypes.MAX_PATH + 1)
+            ctypes.windll.kernel32.GetVolumeInformationW(f'{drive_letter}:\\',
+                                                         volume_name, ctypes.sizeof(volume_name),
+                                                         None, None, None, None, 0)
+            drives.append(Drive(letter=f'{drive_letter}:',
+                                label=volume_name.value,
+                                drive_type=ctypes.windll.kernel32.GetDriveTypeW(f'{drive_letter}:\\')))
 
         return drives
