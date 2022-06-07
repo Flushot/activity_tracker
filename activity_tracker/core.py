@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import logging
 from typing import *
 
+# Docs: https://dtcooper.github.io/python-fitparse/api.html
 import fitparse
 
 from . import utils

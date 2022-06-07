@@ -1,24 +1,35 @@
 # Source: https://abdus.dev/posts/python-monitor-usb/
-import json
 import logging
-import subprocess
 from dataclasses import dataclass
 from typing import *
-
 import win32api
 import win32con
 import win32gui
+import ctypes
 
 
 @dataclass
 class Drive:
+    DRIVE_TYPES: ClassVar[Dict[int, str]] = {
+        0: 'Unknown',
+        1: 'No Root Directory',
+        2: 'Removable Disk',
+        3: 'Local Disk',
+        4: 'Network Drive',
+        5: 'Compact Disc',
+        6: 'RAM Disk',
+    }
+
     letter: str
-    label: str
-    drive_type: str
+    drive_type: int
 
     @property
     def is_removable(self) -> bool:
-        return self.drive_type == 'Removable Disk'
+        return self.drive_type == 2
+
+    @property
+    def drive_type_name(self) -> str:
+        return self.DRIVE_TYPES[self.drive_type]
 
 
 class DeviceListener:
@@ -56,28 +67,15 @@ class DeviceListener:
                  'The meaning of this message is user-defined.'),
     }
 
-    DRIVE_TYPES: Dict[int, str] = {
-        0: 'Unknown',
-        1: 'No Root Directory',
-        2: 'Removable Disk',
-        3: 'Local Disk',
-        4: 'Network Drive',
-        5: 'Compact Disc',
-        6: 'RAM Disk',
-    }
-
     log: logging.Logger = logging.getLogger(__name__ + '.' + __qualname__)
-    hwnd: int
+    on_change: Callable[[List[Drive]], None]
 
     def __init__(self, on_change: Callable[[List[Drive]], None]):
         self.on_change = on_change
-
-        self.log.info(f'Listening to drive changes')
-        self.hwnd = self._create_window()
-        self.log.debug(f'Created listener window with hwnd={self.hwnd:x}')
+        self._create_window()
 
     def start(self) -> None:
-        self.log.debug(f'Listening to messages')
+        self.log.debug(f'Listening to messages...')
         win32gui.PumpMessages()
 
     def poll(self) -> None:
@@ -90,25 +88,32 @@ class DeviceListener:
 
         See also: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindoww
 
-        :return: window hwnd
+        :return: window handle
         """
+        self.log.debug(f'Creating window to listen for drive changes...')
         wc = win32gui.WNDCLASS()
         wc.lpfnWndProc = self._on_message
         wc.lpszClassName = self.__class__.__name__
         wc.hInstance = win32api.GetModuleHandle(None)
         class_atom = win32gui.RegisterClass(wc)
-        return win32gui.CreateWindow(class_atom, self.__class__.__name__, 0, 0, 0, 0, 0, 0, 0, wc.hInstance, None)
+        hwnd = win32gui.CreateWindow(class_atom, self.__class__.__name__, 0, 0, 0, 0, 0, 0, 0, wc.hInstance, None)
+        self.log.debug(f'Created listener window {hwnd:x}')
+        return hwnd
 
     def _on_message(self, hwnd: int, msg: int, wparam: int, lparam: int) -> int:
         if msg != win32con.WM_DEVICECHANGE:
             return 0
 
         event, description = self.WM_DEVICECHANGE_EVENTS[wparam]
-        self.log.debug(f'Received message: {event} = {description}')
 
-        if event in ('DBT_DEVICEREMOVECOMPLETE', 'DBT_DEVICEARRIVAL'):
-            self.log.info('A device has been plugged in (or out)')
+        if event == 'DBT_DEVICEARRIVAL':
+            self.log.debug('A device has been plugged in')
             self.on_change(self.list_drives())
+        elif event == 'DBT_DEVICEREMOVECOMPLETE':
+            self.log.debug('A device has been removed')
+            self.on_change(self.list_drives())
+        else:
+            self.log.debug(f'Received message: {event} = {description}')
 
         return 0
 
@@ -116,29 +121,13 @@ class DeviceListener:
     def list_drives(cls) -> List[Drive]:
         """
         Get a list of drives using WMI
+
         :return: list of drives
         """
-        # TODO: Do this without powershell
-        proc = subprocess.run(
-            args=[
-                'powershell',
-                '-noprofile',
-                '-command',
-                'Get-WmiObject -Class Win32_LogicalDisk | Select-Object deviceid,volumename,drivetype | ConvertTo-Json'
-            ],
-            text=True,
-            stdout=subprocess.PIPE
-        )
+        drives = []
 
-        if proc.returncode != 0 or not proc.stdout.strip():
-            cls.log.error('Failed to enumerate drives')
-            return []
+        for drive_root in win32api.GetLogicalDriveStrings().strip('\x00').split('\x00'):
+            drives.append(Drive(letter=drive_root[0:2],
+                                drive_type=ctypes.windll.kernel32.GetDriveTypeW(drive_root)))
 
-        devices = json.loads(proc.stdout)
-
-        return [
-            Drive(letter=device['deviceid'],
-                  label=device['volumename'],
-                  drive_type=cls.DRIVE_TYPES[device['drivetype']])
-            for device in devices
-        ]
+        return drives
