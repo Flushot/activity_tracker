@@ -20,9 +20,8 @@ def print_record(record: fitparse.DataMessage) -> None:
     print("---")
 
 
-def semicircles_to_degrees(semicircles: Optional[int]) -> Optional[float]:
-    if semicircles is not None:
-        return semicircles * (180 / 2**31)
+def semicircles_to_degrees(semicircles: int) -> float:
+    return semicircles * 180 / 2**31
 
 
 def normalize_ts(ts: datetime.datetime) -> datetime.datetime:

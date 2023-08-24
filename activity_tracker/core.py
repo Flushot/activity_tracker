@@ -30,10 +30,13 @@ def parse_locations(file_glob: str) -> List[Location]:
         # Iterate over all messages of type "record"
         # (other types include "device_info", "file_creator", "event", etc)
         for record in fitfile.get_messages('record'):
-            lat = utils.semicircles_to_degrees(record.get_value('position_lat'))
-            lon = utils.semicircles_to_degrees(record.get_value('position_long'))
+            lat = record.get_value('position_lat')
+            lon = record.get_value('position_long')
             if lat is None or lon is None:
                 continue
+
+            lat = utils.semicircles_to_degrees(lat)
+            lon = utils.semicircles_to_degrees(lon)
 
             locations.append(Location(
                 timestamp=utils.normalize_ts(record.get_value('timestamp')),
